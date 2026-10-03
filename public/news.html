@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bihar Board News | BSEBWala</title>
+<style>
+body{font-family:system-ui,-apple-system,Segoe UI,sans-serif;background:#f5f7fb;margin:0;color:#172033}.wrap{max-width:1000px;margin:30px auto;padding:0 16px}h1{margin-bottom:6px}.muted{color:#667085}.tabs{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0}.tabs button{border:0;border-radius:999px;padding:9px 14px;cursor:pointer;background:#e7ebf3}.tabs button.active{background:#1d4ed8;color:white}.grid{display:grid;gap:14px}.card{background:white;border-radius:14px;padding:18px;box-shadow:0 2px 12px #0000000b}.card h2{font-size:19px;margin:0 0 8px}.card a{color:#155eef;text-decoration:none}.meta{font-size:13px;color:#667085;margin-bottom:9px}.desc{color:#475467;line-height:1.5}.status{padding:15px 0}.error{color:#b42318}</style>
+</head>
+<body><main class="wrap"><h1>बिहार बोर्ड न्यूज़</h1><div class="muted">Latest Bihar Board, BSEB & Bihar Education updates</div>
+<div class="tabs" id="tabs"></div><div id="status" class="status">Loading news…</div><div id="news" class="grid"></div></main>
+<script>
+const cats={all:'सभी',bseb:'BSEB',education:'शिक्षा विभाग',matric:'मैट्रिक',inter:'इंटर',teacher:'Teacher'};
+let current='all';
+const tabs=document.getElementById('tabs');
+for(const [key,label] of Object.entries(cats)){const b=document.createElement('button');b.textContent=label;b.onclick=()=>{current=key;document.querySelectorAll('.tabs button').forEach(x=>x.classList.remove('active'));b.classList.add('active');loadNews()};if(key==='all')b.classList.add('active');tabs.appendChild(b)}
+function esc(s=''){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+async function loadNews(){const status=document.getElementById('status'),news=document.getElementById('news');status.textContent='Loading news…';news.innerHTML='';try{const r=await fetch(`/api/news?category=${current}&limit=20`);const d=await r.json();if(!r.ok)throw new Error(d.error||'API error');status.textContent=`${d.count} latest updates`;news.innerHTML=d.articles.map(a=>`<article class="card"><div class="meta">${esc(a.source)} · ${a.publishedAt?new Date(a.publishedAt).toLocaleString('en-IN'):''}</div><h2><a href="${esc(a.url)}" target="_blank" rel="noopener noreferrer">${esc(a.title)}</a></h2><div class="desc">${esc(a.description).slice(0,260)}</div></article>`).join('')}catch(e){status.innerHTML='<span class="error">News could not be loaded. Please try again.</span>'}}
+loadNews();setInterval(loadNews,300000);
+</script></body></html>

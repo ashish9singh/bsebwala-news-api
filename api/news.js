@@ -41,10 +41,13 @@ export default async function handler(req, res) {
     // Strict keyword whitelist to reject any stray political/general news
     const KEYWORDS = [
       "bihar board", "bseb", "matric", "inter", "ofss", "bbose", 
-      "shiksha vibhag", "education department", "teacher", "bpsc tre", 
+      "shiksha vibhag", "education department", "bihar teacher", "bpsc tre", 
       "scholarship", "medhasoft", "digilocker", "stet", "sakshamta", 
       "admit card", "result", "scrutiny", "compartment", "syllabus", 
-      "model paper", "dummy registration", "बिहार बोर्ड"
+      "model paper", "dummy registration", "बिहार बोर्ड", "bpsc teacher",
+       "bihar board class 9 registration",  "bihar board class 11 registration",
+       "bihar board class 10 exam form", "bihar board class 12 exam form", "tre teacher",
+      "niyojit teacher","bihar education", "Mithilesh tiwari Minister", "Bihar Education Minister"
     ];
 
     while ((match = itemRegex.exec(xmlText)) !== null) {

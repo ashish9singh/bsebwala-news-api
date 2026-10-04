@@ -1,5 +1,4 @@
 export default async function handler(req, res) {
-  // 1. Enable CORS for all domains
   res.setHeader('Access-Control-Allow-Credentials', true);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS');
@@ -13,25 +12,23 @@ export default async function handler(req, res) {
     return;
   }
 
-  // 2. Cache response on Vercel's Edge CDN for 5 minutes
   res.setHeader('Cache-Control', 's-maxage=300, stale-while-revalidate=600');
 
   try {
-    // 3. Cast a wide net: Group broad search terms into 3 RSS URLs to avoid hitting query length limits
+    // 1. Pre-filtered RSS URLs: Forcing Google to only look for Indian Education
     const FEEDS = [
-      // Board, Students & Exams
-      `https://news.google.com/rss/search?q=${encodeURIComponent('BSEB OR "Bihar Board" OR "बिहार बोर्ड" OR matric OR inter OR OFSS OR BBOSE')}&hl=en-IN&gl=IN&ceid=IN:en`,
+      // Bihar Board & Exams
+      `https://news.google.com/rss/search?q=${encodeURIComponent('(BSEB OR "Bihar Board" OR matric OR inter OR OFSS OR BBOSE) (Bihar OR India)')}&hl=en-IN&gl=IN&ceid=IN:en`,
       // Teachers & Recruitment
-      `https://news.google.com/rss/search?q=${encodeURIComponent('"Bihar teacher" OR "BPSC TRE" OR STET OR sakshamta OR "niyojit teacher"')}&hl=en-IN&gl=IN&ceid=IN:en`,
-      // Dept, Ministers & Scholarships
-      `https://news.google.com/rss/search?q=${encodeURIComponent('medhasoft OR scholarship OR "Mithilesh tiwari" OR "shiksha vibhag"')}&hl=en-IN&gl=IN&ceid=IN:en`
+      `https://news.google.com/rss/search?q=${encodeURIComponent('("Bihar teacher" OR "BPSC TRE" OR STET OR sakshamta OR "niyojit teacher") (Education OR School)')}&hl=en-IN&gl=IN&ceid=IN:en`,
+      // Dept, Scholarships & General Indian Education (CBSE, UGC, NTA)
+      `https://news.google.com/rss/search?q=${encodeURIComponent('(medhasoft OR scholarship OR "shiksha vibhag" OR CBSE OR ICSE OR EXAM OR "Education Ministry") India')}&hl=en-IN&gl=IN&ceid=IN:en`
     ];
 
-    // Fetch all RSS feeds concurrently
     const fetchPromises = FEEDS.map(url =>
       fetch(url, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
       }).then(res => res.ok ? res.text() : '')
     );
@@ -40,21 +37,23 @@ export default async function handler(req, res) {
 
     const itemRegex = /<item>([\s\S]*?)<\/item>/gi;
     const items = [];
-    const seenUrls = new Set(); // Prevent duplicate articles
+    const seenUrls = new Set(); 
 
-    // 4. Strict Filtering: Your exact requested list of keywords
-    const KEYWORDS = [
-      "bihar board", "bseb", "matric", "inter", "ofss", "bbose", 
-      "shiksha vibhag", "education department", "bihar teacher", "bpsc tre", 
-      "scholarship", "medhasoft", "digilocker", "stet", "sakshamta", 
-      "admit card", "result", "scrutiny", "compartment", "syllabus", 
-      "model paper", "dummy registration", "बिहार बोर्ड", "bpsc teacher",
-      "bihar board class 9 registration", "bihar board class 11 registration",
-      "bihar board class 10 exam form", "bihar board class 12 exam form", "tre teacher",
-      "niyojit teacher", "bihar education", "mithilesh tiwari minister", "bihar education minister"
+    // 2. Strict Filtering Arrays
+    const INDIA_REGION_WORDS = [
+      "india", "indian", "bharat", "bihar", "patna", "national", "state", "delhi", "central"
     ];
 
-    // Loop through every fetched RSS feed
+    const EDUCATION_WORDS = [
+      "education", "school", "exam", "board", "teacher", "student", "university", "college", 
+      "syllabus", "shiksha", "result", "admit card", "scholarship", "academic", "class"
+    ];
+
+    const EXACT_ACRONYMS = [
+      "bihar board", "bseb", "bpsc tre", "stet", "ofss", "bbose", "medhasoft", 
+      "cbse", "ugc", "nta", "neet", "jee", "ncert", "sakshamta"
+    ];
+
     for (const xmlText of xmlTexts) {
       if (!xmlText) continue;
       
@@ -73,10 +72,8 @@ export default async function handler(req, res) {
         const rawDescription = getTagValue('description');
         const source = getTagValue('source') || 'News Source';
 
-        // Skip if we already added this URL
         if (seenUrls.has(link)) continue;
 
-        // Clean HTML tags and decode entities for plain text
         const cleanDescription = rawDescription
           .replace(/&lt;/g, '<').replace(/&gt;/g, '>')
           .replace(/<[^>]*>?/gm, '')
@@ -88,10 +85,21 @@ export default async function handler(req, res) {
 
         const fullText = (title + ' ' + cleanDescription).toLowerCase();
         
-        // Check if the article contains ANY of your specific keywords
-        const isRelevant = KEYWORDS.some(k => fullText.includes(k.toLowerCase()));
+        // Double-Lock Validation Logic:
+        // A. Does it have an explicit exact acronym? (e.g., BSEB, CBSE, BPSC TRE)
+        const hasExactAcronym = EXACT_ACRONYMS.some(k => fullText.includes(k));
 
-        if (isRelevant && title) {
+        // B. Or does it explicitly mention BOTH India/Bihar AND Education context?
+        const hasRegion = INDIA_REGION_WORDS.some(k => fullText.includes(k));
+        const hasEducation = EDUCATION_WORDS.some(k => fullText.includes(k));
+        
+        // If it passes either A or B, it is guaranteed to be Indian Education news.
+        const isStrictlyIndianEducation = hasExactAcronym || (hasRegion && hasEducation);
+
+        // C. Ensure we don't accidentally pick up unrelated sports or stock market news sharing acronyms
+        const isNotJunk = !fullText.match(/cricket|bcci|stock market|sensex|nifty|bollywood|hollywood/);
+
+        if (isStrictlyIndianEducation && isNotJunk && title) {
           seenUrls.add(link);
           items.push({
             title,
@@ -104,10 +112,8 @@ export default async function handler(req, res) {
       }
     }
 
-    // 5. Sort all combined items by Date (Newest first)
     items.sort((a, b) => new Date(b.publishedAt) - new Date(a.publishedAt));
 
-    // Return the successful data
     return res.status(200).json({
       status: 'ok',
       totalResults: items.length,
